@@ -1,0 +1,686 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Artboard App with Three.js</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            overflow: hidden;
+            transform-origin: 0 0;
+            transition: none;
+        }
+
+        #viewport-transform {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-origin: 0 0;
+        }
+
+        #connections-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connection-path {
+            pointer-events: all;
+            cursor: pointer;
+            stroke-width: 2;
+            fill: none;
+            opacity: 0.7;
+            transition: opacity 0.2s, stroke-width 0.2s;
+        }
+
+        .shape-connection-path {
+            stroke: #007AFF; /* Blue */
+        }
+
+        .view-connection-path {
+            stroke: #28A745; /* Green */
+        }
+
+        .connection-path:hover {
+            opacity: 1;
+            stroke-width: 3;
+        }
+
+        .artboard {
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            cursor: move;
+            user-select: none;
+            z-index: 2;
+        }
+
+        .artboard.dragging {
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+        }
+
+        .artboard.cloning {
+            opacity: 0.6;
+        }
+
+        .artboard-header {
+            padding: 10px 15px;
+            background: #f8f8f8;
+            border-bottom: 1px solid #e0e0e0;
+            border-radius: 8px 8px 0 0;
+            font-size: 14px;
+            color: #333;
+        }
+
+        .artboard-viewport {
+            width: 100%;
+            height: calc(100% - 41px);
+            border-radius: 0 0 8px 8px;
+            display: block;
+            cursor: grab;
+        }
+
+        #toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: white;
+            padding: 10px 20px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+        }
+
+        #toolbar label {
+            margin-right: 10px;
+            font-size: 14px;
+            color: #333;
+        }
+
+        #toolbar button {
+            margin-left: 20px;
+            padding: 6px 12px;
+            font-size: 14px;
+            color: #333;
+            background-color: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #toolbar button:hover:not(:disabled) {
+            background-color: #f0f0f0;
+        }
+
+        #toolbar button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Palette styles */
+        #color-palette {
+            display: flex;
+            align-items: center;
+        }
+        .color-swatch {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            margin-right: 5px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .color-swatch.selected {
+            border: 2px solid #333;
+        }
+
+        .add-button {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 60px;
+            height: 60px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            font-size: 24px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+            transition: transform 0.2s;
+            z-index: 100;
+        }
+
+        .add-button:hover {
+            transform: scale(1.1);
+        }
+
+        .add-button:active {
+            transform: scale(0.95);
+        }
+    </style>
+</head>
+<body>
+    <div id="toolbar">
+        <label>Select Face Color:</label>
+        <div id="color-palette">
+            <!-- Ten fixed colors -->
+            <div class="color-swatch" data-color="#007AFF" style="background:#007AFF"></div>
+            <div class="color-swatch" data-color="#FF9500" style="background:#FF9500"></div>
+            <div class="color-swatch" data-color="#34C759" style="background:#34C759"></div>
+            <div class="color-swatch" data-color="#FF3B30" style="background:#FF3B30"></div>
+            <div class="color-swatch" data-color="#5856D6" style="background:#5856D6"></div>
+            <div class="color-swatch" data-color="#5AC8FA" style="background:#5AC8FA"></div>
+            <div class="color-swatch" data-color="#AF52DE" style="background:#AF52DE"></div>
+            <div class="color-swatch" data-color="#FFCC00" style="background:#FFCC00"></div>
+            <div class="color-swatch" data-color="#8E8E93" style="background:#8E8E93"></div>
+            <div class="color-swatch" data-color="#FFFFFF" style="background:#FFFFFF"></div>
+        </div>
+        <button id="add-cube-btn" disabled>Add Cube</button>
+    </div>
+
+    <div id="canvas-container">
+        <div id="viewport-transform">
+            <svg id="connections-svg"></svg>
+        </div>
+    </div>
+    
+    <button class="add-button" onclick="createArtboard()">+</button>
+
+    <script>
+        let artboardCount = 0;
+        const artboards = new Map();
+        let nextConnectionId = 0;
+        const connections = new Map();
+        let selection = { artboardId: null, cubeIndex: null, faceIndex: null };
+        const container = document.getElementById('canvas-container');
+        const viewportTransform = document.getElementById('viewport-transform');
+        const connectionsSvg = document.getElementById('connections-svg');
+
+        const viewport = { scale:1, x:0, y:0, isPanning:false, lastX:0, lastY:0 };
+
+        function generateConnectionId() {
+            return `conn-${nextConnectionId++}`;
+        }
+
+        function selectFace(artboardId, cubeIndex, faceIndex) {
+            const addCubeBtn = document.getElementById('add-cube-btn');
+
+            // Un-highlight previous
+            if (selection.artboardId) {
+                const oldArt = artboards.get(selection.artboardId);
+                if (oldArt && selection.cubeIndex!==null) {
+                    const oldCube = oldArt.cubeGroup.children[selection.cubeIndex];
+                    if (oldCube && oldCube.material[selection.faceIndex]) {
+                        oldCube.material[selection.faceIndex].emissive.setHex(0x000000);
+                    }
+                }
+            }
+
+            selection.artboardId = artboardId;
+            selection.cubeIndex = cubeIndex;
+            selection.faceIndex = faceIndex;
+
+            if (artboardId!==null && cubeIndex!==null) {
+                const art = artboards.get(artboardId);
+                const cube = art.cubeGroup.children[cubeIndex];
+                cube.material[faceIndex].emissive.setHex(0x555555);
+                // Highlight palette swatch
+                const hex = '#' + cube.material[faceIndex].color.getHexString();
+                document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+                const sw = document.querySelector(`.color-swatch[data-color="${hex}"]`);
+                if (sw) sw.classList.add('selected');
+                if (addCubeBtn) addCubeBtn.disabled = false;
+            } else {
+                if (addCubeBtn) addCubeBtn.disabled = true;
+                document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+            }
+        }
+
+        class Artboard {
+            constructor(x=100,y=100,createDefaultCube=true) {
+                this.id = `artboard-${++artboardCount}`;
+                this.x=x; this.y=y; this.width=300; this.height=400;
+                this.isDragging=false; this.isCloning=false; this.dragOffset={x:0,y:0};
+                this.createElement();
+                this.initThreeJS(createDefaultCube);
+                this.attachEventListeners();
+                artboards.set(this.id,this);
+            }
+            createElement(){
+                this.element = document.createElement('div');
+                this.element.className='artboard';
+                this.element.id=this.id;
+                this.element.style.left=`${this.x}px`;
+                this.element.style.top=`${this.y}px`;
+                this.element.style.width=`${this.width}px`;
+                this.element.style.height=`${this.height}px`;
+                const header = document.createElement('div');
+                header.className='artboard-header';
+                header.textContent=`Artboard ${artboardCount}`;
+                this.canvas = document.createElement('canvas');
+                this.canvas.className='artboard-viewport';
+                this.canvas.width=this.width;
+                this.canvas.height=this.height-41;
+                this.element.appendChild(header);
+                this.element.appendChild(this.canvas);
+                viewportTransform.appendChild(this.element);
+            }
+            initThreeJS(createDefaultCube=true){
+                this.scene=new THREE.Scene();
+                this.scene.background=new THREE.Color(0xf0f0f0);
+                const aspect=this.canvas.width/this.canvas.height;
+                this.camera=new THREE.PerspectiveCamera(75,aspect,0.1,1000);
+                this.camera.position.z=5;
+                this.cameraDistance=5;
+                this.cameraTarget=new THREE.Vector3(0,0,0);
+                this.cameraPan=new THREE.Vector2(0,0);
+                this.cameraRotation={x:0,y:0};
+                this.updateCameraPosition(false);
+                this.renderer=new THREE.WebGLRenderer({canvas:this.canvas,antialias:true});
+                this.renderer.setSize(this.canvas.width,this.canvas.height);
+                this.cubeGroup=new THREE.Group();
+                this.scene.add(this.cubeGroup);
+                if(createDefaultCube){
+                    const geom=new THREE.BoxGeometry(2,2,2);
+                    const defaultColor=0x007AFF;
+                    const mats=[];
+                    for(let i=0;i<6;i++){
+                        mats.push(new THREE.MeshPhongMaterial({color:defaultColor,specular:0x111111,shininess:100}));
+                    }
+                    const firstCube=new THREE.Mesh(geom,mats);
+                    this.cubeGroup.add(firstCube);
+                }
+                const ambient=new THREE.AmbientLight(0xffffff,0.6);
+                this.scene.add(ambient);
+                const dir=new THREE.DirectionalLight(0xffffff,0.4);
+                dir.position.set(5,5,5);
+                this.scene.add(dir);
+                this.isRotating=false;
+                this.lastMousePosition={x:0,y:0};
+                this.animate();
+            }
+            attachEventListeners(){
+                const header=this.element.querySelector('.artboard-header');
+                header.addEventListener('mousedown',e=>this.onHeaderMouseDown(e));
+                this.canvas.addEventListener('mousedown',e=>this.onCanvasMouseDown(e));
+                this.canvas.addEventListener('mousemove',e=>this.onCanvasMouseMove(e));
+                this.canvas.addEventListener('mouseup',()=>this.onCanvasMouseUp());
+                this.canvas.addEventListener('mouseleave',()=>this.onCanvasMouseUp());
+                this.canvas.addEventListener('wheel',e=>this.onCanvasWheel(e),{passive:false});
+            }
+            onHeaderMouseDown(e){
+                const rect=this.element.getBoundingClientRect();
+                this.dragOffset.x=e.clientX-rect.left;
+                this.dragOffset.y=e.clientY-rect.top;
+                if(e.altKey||e.metaKey){
+                    this.isCloning=true;
+                    const clone=this.clone();
+                    clone.startDragging(e);
+                } else this.startDragging(e);
+            }
+            startDragging(e){
+                this.isDragging=true;
+                this.element.classList.add('dragging');
+                const onMouseMove=(e)=>{
+                    if(!this.isDragging) return;
+                    this.x=(e.clientX-viewport.x)/viewport.scale-this.dragOffset.x;
+                    this.y=(e.clientY-viewport.y)/viewport.scale-this.dragOffset.y;
+                    this.element.style.left=`${this.x}px`;
+                    this.element.style.top=`${this.y}px`;
+                    updateConnections();
+                };
+                const onMouseUp=()=>{
+                    this.isDragging=false;
+                    this.element.classList.remove('dragging');
+                    document.removeEventListener('mousemove',onMouseMove);
+                    document.removeEventListener('mouseup',onMouseUp);
+                };
+                document.addEventListener('mousemove',onMouseMove);
+                document.addEventListener('mouseup',onMouseUp);
+            }
+            onCanvasMouseDown(e){
+                const rect=this.canvas.getBoundingClientRect();
+                const mouse=new THREE.Vector2();
+                mouse.x=((e.clientX-rect.left)/rect.width)*2-1;
+                mouse.y=-((e.clientY-rect.top)/rect.height)*2+1;
+                const raycaster=new THREE.Raycaster();
+                raycaster.setFromCamera(mouse,this.camera);
+                const intersects=raycaster.intersectObjects(this.cubeGroup.children,true);
+                if(intersects.length>0){
+                    const obj=intersects[0].object;
+                    const idx=this.cubeGroup.children.indexOf(obj);
+                    const faceIdx=intersects[0].face.materialIndex;
+                    selectFace(this.id,idx,faceIdx);
+                } else {
+                    if(e.target===this.canvas) selectFace(null,null,null);
+                }
+                this.isRotating=true;
+                this.lastMousePosition.x=e.clientX;
+                this.lastMousePosition.y=e.clientY;
+                this.canvas.style.cursor='grabbing';
+            }
+            onCanvasMouseMove(e){
+                if(!this.isRotating) return;
+                const dx=e.clientX-this.lastMousePosition.x;
+                const dy=e.clientY-this.lastMousePosition.y;
+                this.cameraRotation.x-=dy*0.01;
+                this.cameraRotation.y-=dx*0.01;
+                this.lastMousePosition.x=e.clientX;
+                this.lastMousePosition.y=e.clientY;
+                this.updateCameraPosition();
+            }
+            onCanvasMouseUp(){
+                this.isRotating=false;
+                this.canvas.style.cursor='grab';
+            }
+            onCanvasWheel(e){
+                e.preventDefault(); e.stopPropagation();
+                const isPinch=e.ctrlKey;
+                if(isPinch){
+                    const zoomSpeed=0.01;
+                    this.cameraDistance*=(1+e.deltaY*zoomSpeed);
+                    this.cameraDistance=Math.max(1,Math.min(20,this.cameraDistance));
+                } else if(e.shiftKey){
+                    const panSpeed=0.005;
+                    this.cameraPan.x+=e.deltaX*panSpeed;
+                    this.cameraPan.y-=e.deltaY*panSpeed;
+                } else {
+                    const orbitSpeed=0.005;
+                    this.cameraRotation.y-=e.deltaX*orbitSpeed;
+                    this.cameraRotation.x-=e.deltaY*orbitSpeed;
+                }
+                this.updateCameraPosition();
+            }
+            setCameraState(rotation,distance,pan,triggerSync=true){
+                this.cameraRotation.x=rotation.x;
+                this.cameraRotation.y=rotation.y;
+                this.cameraDistance=distance;
+                this.cameraPan.x=pan.x;
+                this.cameraPan.y=pan.y;
+                this.updateCameraPosition(triggerSync);
+            }
+            updateCameraPosition(triggerSync=true){
+                const r=this.cameraDistance;
+                this.camera.position.x=r*Math.sin(this.cameraRotation.y)*Math.cos(this.cameraRotation.x);
+                this.camera.position.y=r*Math.sin(this.cameraRotation.x);
+                this.camera.position.z=r*Math.cos(this.cameraRotation.y)*Math.cos(this.cameraRotation.x);
+                this.camera.position.x+=this.cameraPan.x;
+                this.camera.position.y+=this.cameraPan.y;
+                const tgt=new THREE.Vector3(this.cameraPan.x,this.cameraPan.y,0);
+                this.camera.lookAt(tgt);
+                if(triggerSync){
+                    const comp=findConnectedComponent(this.id,'view');
+                    comp.forEach(id=>{
+                        if(id!==this.id){
+                            const art=artboards.get(id);
+                            if(art) art.setCameraState(this.cameraRotation,this.cameraDistance,this.cameraPan,false);
+                        }
+                    });
+                }
+            }
+            animate(){
+                if(!this.renderer) return;
+                requestAnimationFrame(()=>this.animate());
+                this.renderer.render(this.scene,this.camera);
+            }
+            clone(){
+                const clone=new Artboard(this.x+20,this.y+20,false);
+                clone.setCameraState(this.cameraRotation,this.cameraDistance,this.cameraPan,false);
+                this.cubeGroup.children.forEach(orig=>{
+                    const newMats=orig.material.map(m=>m.clone());
+                    const newCube=new THREE.Mesh(orig.geometry,newMats);
+                    newCube.position.copy(orig.position);
+                    clone.cubeGroup.add(newCube);
+                });
+                const shapeConnId=generateConnectionId();
+                connections.set(shapeConnId,{from:this.id,to:clone.id,type:'shape'});
+                const viewConnId=generateConnectionId();
+                connections.set(viewConnId,{from:this.id,to:clone.id,type:'view'});
+                updateConnections();
+                clone.element.classList.add('cloning');
+                setTimeout(()=>clone.element.classList.remove('cloning'),300);
+                return clone;
+            }
+            addAdjacentCube(parentCubeIndex,faceIndex){
+                if(parentCubeIndex>=this.cubeGroup.children.length) return;
+                const parentCube=this.cubeGroup.children[parentCubeIndex];
+                const cubeSize=2;
+                const offsets=[
+                    new THREE.Vector3(cubeSize,0,0),
+                    new THREE.Vector3(-cubeSize,0,0),
+                    new THREE.Vector3(0,cubeSize,0),
+                    new THREE.Vector3(0,-cubeSize,0),
+                    new THREE.Vector3(0,0,cubeSize),
+                    new THREE.Vector3(0,0,-cubeSize)
+                ];
+                const newPos=parentCube.position.clone().add(offsets[faceIndex]);
+                for(const cube of this.cubeGroup.children){
+                    if(cube.position.distanceTo(newPos)<0.1) return;
+                }
+                const geom=new THREE.BoxGeometry(cubeSize,cubeSize,cubeSize);
+                const defaultColor=0x007AFF;
+                const mats=[];
+                for(let i=0;i<6;i++){
+                    mats.push(new THREE.MeshPhongMaterial({color:defaultColor,specular:0x111111,shininess:100}));
+                }
+                const newCube=new THREE.Mesh(geom,mats);
+                newCube.position.copy(newPos);
+                this.cubeGroup.add(newCube);
+            }
+            destroy(){
+                if(selection.artboardId===this.id) selectFace(null,null,null);
+                this.renderer.dispose();
+                this.scene.traverse(obj=>{
+                    if(obj.geometry) obj.geometry.dispose();
+                    if(obj.material){
+                        if(Array.isArray(obj.material)) obj.material.forEach(m=>m.dispose());
+                        else obj.material.dispose();
+                    }
+                });
+                const toDel=[];
+                connections.forEach((c,id)=>{ if(c.from===this.id||c.to===this.id) toDel.push(id); });
+                toDel.forEach(id=>connections.delete(id));
+                this.element.remove();
+                artboards.delete(this.id);
+                updateConnections();
+            }
+        }
+
+        function createArtboard() {
+            const centerX=(window.innerWidth/2-viewport.x)/viewport.scale-150;
+            const centerY=(window.innerHeight/2-viewport.y)/viewport.scale-200;
+            const offset=artboardCount*30;
+            new Artboard(centerX+offset,centerY+offset);
+        }
+
+        function updateConnections() {
+            connectionsSvg.innerHTML='';
+            connections.forEach((conn,id)=>{
+                const p=artboards.get(conn.from), c=artboards.get(conn.to);
+                if(p&&c){
+                    const path=createConnectionPath(p,c,id,conn.type);
+                    connectionsSvg.appendChild(path);
+                }
+            });
+        }
+
+        function createConnectionPath(parent, child, connectionId, type) {
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            path.classList.add('connection-path', `${type}-connection-path`);
+            path.dataset.connectionId = connectionId;
+            const title = document.createElementNS('http://www.w3.org/2000/svg', 'title');
+            title.textContent = `${type} connection`;
+            path.appendChild(title);
+            const startX = parent.x + parent.width/2;
+            const startY = parent.y + parent.height/2;
+            const endX = child.x + child.width/2;
+            const endY = child.y + child.height/2;
+            const midX = (startX + endX)/2;
+            const midY = (startY + endY)/2;
+            let controlOffsetFactor = (type==='view'? -50:50);
+            const dx = endX - startX, dy = endY - startY;
+            const length = Math.sqrt(dx*dx+dy*dy);
+            let perpX=0, perpY=0;
+            if(length>0){
+                perpX = -dy/length * controlOffsetFactor;
+                perpY = dx/length * controlOffsetFactor;
+            }
+            const controlX = midX+perpX, controlY=midY+perpY;
+            path.setAttribute('d', `M ${startX} ${startY} Q ${controlX} ${controlY} ${endX} ${endY}`);
+            path.addEventListener('click', e=>{
+                e.stopPropagation(); deleteConnection(connectionId);
+            });
+            return path;
+        }
+
+        function deleteConnection(connectionId) {
+            connections.delete(connectionId);
+            updateConnections();
+        }
+
+        function findConnectedComponent(startArtboardId, connectionType) {
+            if(!artboards.has(startArtboardId)) return new Set();
+            const adj = new Map();
+            artboards.forEach(a=>adj.set(a.id,[]));
+            connections.forEach(conn=>{
+                if(conn.type===connectionType && artboards.has(conn.from) && artboards.has(conn.to)){
+                    adj.get(conn.from).push(conn.to);
+                    adj.get(conn.to).push(conn.from);
+                }
+            });
+            const visited=new Set(), component=new Set(), queue=[startArtboardId];
+            visited.add(startArtboardId);
+            while(queue.length){
+                const curr=queue.shift();
+                component.add(curr);
+                (adj.get(curr)||[]).forEach(nb=>{
+                    if(!visited.has(nb)){ visited.add(nb); queue.push(nb); }
+                });
+            }
+            return component;
+        }
+
+        function updateViewport() {
+            viewportTransform.style.transform = `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`;
+        }
+
+        // Background pan & zoom
+        container.addEventListener('wheel', (e) => {
+            if (e.target===container || e.target===viewportTransform || e.target.tagName==='svg' || e.target.tagName==='path') {
+                e.preventDefault();
+                const isPinch=e.ctrlKey;
+                if(isPinch){
+                    const zoomSpeed=0.01;
+                    const oldScale=viewport.scale;
+                    viewport.scale *= (1 - e.deltaY * zoomSpeed);
+                    viewport.scale = Math.max(0.1, Math.min(5, viewport.scale));
+                    const mx=e.clientX, my=e.clientY;
+                    const scaleChange=viewport.scale-oldScale;
+                    viewport.x -= (mx - viewport.x)*scaleChange/oldScale;
+                    viewport.y -= (my - viewport.y)*scaleChange/oldScale;
+                } else {
+                    viewport.x -= e.deltaX;
+                    viewport.y -= e.deltaY;
+                }
+                updateViewport();
+            }
+        }, { passive: false });
+
+        let isSpacePressed=false;
+        document.addEventListener('keydown',e=>{
+            if(e.code==='Space'&&!isSpacePressed){
+                isSpacePressed=true;
+                container.style.cursor='grab';
+            }
+        });
+        document.addEventListener('keyup',e=>{
+            if(e.code==='Space'){
+                isSpacePressed=false;
+                container.style.cursor='default';
+            }
+        });
+        container.addEventListener('mousedown', e => {
+            if(isSpacePressed && (e.target===container || e.target===viewportTransform)){
+                viewport.isPanning=true;
+                viewport.lastX=e.clientX;
+                viewport.lastY=e.clientY;
+                container.style.cursor='grabbing';
+            }
+        });
+        document.addEventListener('mousemove', e => {
+            if(viewport.isPanning){
+                viewport.x += e.clientX - viewport.lastX;
+                viewport.y += e.clientY - viewport.lastY;
+                viewport.lastX = e.clientX;
+                viewport.lastY = e.clientY;
+                updateViewport();
+            }
+        });
+        document.addEventListener('mouseup', () => {
+            if(viewport.isPanning){
+                viewport.isPanning=false;
+                container.style.cursor=isSpacePressed?'grab':'default';
+            }
+        });
+
+        // Palette listener
+        document.querySelectorAll('.color-swatch').forEach(swatch => {
+            swatch.addEventListener('click', () => {
+                if(!selection.artboardId || selection.cubeIndex===null) return;
+                const newColor = swatch.dataset.color;
+                const compIds = findConnectedComponent(selection.artboardId, 'shape');
+                compIds.forEach(id => {
+                    const art=artboards.get(id);
+                    if(art && art.cubeGroup.children.length>selection.cubeIndex){
+                        const cube=art.cubeGroup.children[selection.cubeIndex];
+                        if(cube.material.length>selection.faceIndex){
+                            cube.material[selection.faceIndex].color.set(newColor);
+                        }
+                    }
+                });
+                document.querySelectorAll('.color-swatch').forEach(s=>s.classList.remove('selected'));
+                swatch.classList.add('selected');
+            });
+        });
+
+        document.getElementById('add-cube-btn').addEventListener('click', ()=>{
+            if(!selection.artboardId || selection.cubeIndex===null) return;
+            const compIds=findConnectedComponent(selection.artboardId,'shape');
+            compIds.forEach(id=>{
+                const art=artboards.get(id);
+                if(art) art.addAdjacentCube(selection.cubeIndex,selection.faceIndex);
+            });
+            selectFace(null,null,null);
+        });
+
+        // Init
+        createArtboard();
+    </script>
+</body>
+</html>
