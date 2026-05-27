@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KiCad Import And Preview (WASM)</title>
+  <link rel="stylesheet" href="style.css?v=2026-04-12T16:15:00" />
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">Browser-Only KiCad Pipeline</p>
+        <h1>Import, preview, and DRC a design in the browser.</h1>
+      </div>
+      <p class="lede">
+        KiCad, EasyEDA, Eagle, and Altium files are converted to a KiCad project locally in WASM,
+        then rendered as schematic and PCB SVG with a downloadable zip.
+      </p>
+    </section>
+
+    <section class="panel uploader">
+      <form id="upload-form">
+        <input id="file-input" type="file" multiple hidden />
+        <input id="folder-input" type="file" multiple webkitdirectory hidden />
+
+        <label id="drop-zone" class="drop-zone" for="file-input">
+          <span class="drop-title">Drop files here</span>
+          <span class="drop-copy">or click to choose files</span>
+        </label>
+
+        <div class="actions split-actions">
+          <button id="pick-files" type="button">Choose Files</button>
+          <button id="pick-folder" type="button" class="ghost">Choose Folder</button>
+          <button id="submit-button" type="submit" disabled>Loading WASM...</button>
+        </div>
+
+        <p class="drop-hint">
+          For Altium or Eagle imports, include the related project files together or pick the whole
+          folder.
+        </p>
+
+        <div id="picked-files" class="picked-files" hidden></div>
+      </form>
+    </section>
+
+    <section id="status-panel" class="panel status-panel" hidden>
+      <div id="status-text" class="status-text"></div>
+    </section>
+
+    <section id="result-panel" class="results" hidden>
+      <div class="result-head panel">
+        <div>
+          <p class="eyebrow">Result</p>
+          <h2 id="result-title">Converted project</h2>
+          <p id="result-meta" class="result-meta"></p>
+        </div>
+        <a id="download-link" class="download-link" href="#" download="project.zip">Download KiCad Project Zip</a>
+      </div>
+
+      <div class="preview-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <h3>Schematic</h3>
+          </div>
+          <div id="schematic-previews" class="preview-stack empty-state">
+            No schematic preview yet.
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h3>PCB</h3>
+          </div>
+          <div id="pcb-previews" class="preview-stack empty-state">
+            No PCB preview yet.
+          </div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>DRC</h3>
+        </div>
+        <pre id="drc-output" class="code-block">No DRC report yet.</pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>Project Files</h3>
+        </div>
+        <pre id="project-files" class="code-block"></pre>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h3>CLI Log</h3>
+        </div>
+        <pre id="cli-log" class="code-block"></pre>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    window.KICAD_WEBAPP_BUILD = "2026-04-12T16:15:00";
+  </script>
+  <script src="zip-utils.js?v=2026-04-12T16:15:00"></script>
+  <script src="app.js?v=2026-04-12T16:15:00"></script>
+</body>
+</html>
